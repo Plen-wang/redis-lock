@@ -52,7 +52,7 @@ public class RedisLockerImpl implements RedisLocker {
     public Boolean acquireLockWithTimeout(int lockKeyExpireSecond, String lockKey, Boolean isWait) throws Exception {
         if (StringUtils.isEmpty(lockKey)) throw new Exception("lockKey is empty.");
 
-        int tryCounts = 0;
+        int retryCounts = 0;
         while (true) {
             Long status, expire = 0L;
             status = jedis.setnx(lockKey, redisIdentityKey);/**设置 lock key.*/
@@ -60,19 +60,25 @@ public class RedisLockerImpl implements RedisLocker {
                 expire = jedis.expire(lockKey, lockKeyExpireSecond);/**set  redis key expire time.*/
             }
             if (status > 0 && expire > 0) {
-                logger.info(String.format("当前节点：%s,获取到锁：%s", getRedisIdentityKey(), lockKey));
+                logger.info(String.
+                        format("t:%s,当前节点：%s,获取到锁：%s", Thread.currentThread().getId(), getRedisIdentityKey(), lockKey));
                 return true;/**获取到lock*/
             }
 
             try {
-                if (isWait && tryCounts < RetryCount) {
-                    tryCounts++;
-                    synchronized (this) {/**借助object condition queue 来提高CPU利用率*/
-                        logger.info(String.format("当前节点：%s,尝试等待获取锁：%s", getRedisIdentityKey(), lockKey));
-                        this.wait(WaitLockTimeSecond); /**未能获取到lock，进行指定时间的wait再重试.*/
+                if (isWait && retryCounts < RetryCount) {
+                    retryCounts++;
+                    synchronized (this) {//借助object condition queue 来提高CPU利用率
+                        logger.info(String.
+                                format("t:%s,当前节点：%s,尝试等待获取锁：%s", Thread.currentThread().getId(), getRedisIdentityKey(), lockKey));
+                        this.wait(WaitLockTimeSecond); //未能获取到lock，进行指定时间的wait再重试.
                     }
+                } else if (retryCounts == RetryCount) {
+                    logger.info(String.
+                            format("t:%s,当前节点：%s,指定时间内获取锁失败：%s", Thread.currentThread().getId(), getRedisIdentityKey(), lockKey));
+                    return false;
                 } else {
-                    return false;/**不需要等待，直接退出。*/
+                    return false;//不需要等待，直接退出。
                 }
             } catch (InterruptedException e) {
                 e.printStackTrace();
@@ -91,10 +97,12 @@ public class RedisLockerImpl implements RedisLocker {
 
         long status = jedis.del(lockKey);
         if (status > 0) {
-            logger.info(String.format("当前节点：%s,释放锁：%s 成功。", getRedisIdentityKey(), lockKey));
+            logger.info(String.
+                    format("t:%s,当前节点：%s,释放锁：%s 成功。", Thread.currentThread().getId(), getRedisIdentityKey(), lockKey));
             return true;
         }
-        logger.info(String.format("当前节点：%s,释放锁：%s 失败。", getRedisIdentityKey(), lockKey));
+        logger.info(String.
+                format("t:%s,当前节点：%s,释放锁：%s 失败。", Thread.currentThread().getId(), getRedisIdentityKey(), lockKey));
         return false;
     }
 }
