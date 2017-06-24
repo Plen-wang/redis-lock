@@ -1,6 +1,6 @@
 # redis-lock
 
-* redis setnx cmmand
+* redis setnx command
 * java object condition queue 条件队列
 * retrycount 带有重试次数限制
 * object wait time 带有超时时间的wait
